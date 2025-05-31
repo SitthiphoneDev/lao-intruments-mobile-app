@@ -13,7 +13,7 @@ import 'package:dio/dio.dart' as _i361;
 import 'package:get_it/get_it.dart' as _i174;
 import 'package:injectable/injectable.dart' as _i526;
 import 'package:stackrs/DI/register_modules.dart' as _i806;
-import 'package:stackrs/features/stackrs/state/stackrs_cubit.dart' as _i922;
+import 'package:stackrs/features/home/state/home_cubit.dart' as _i71;
 import 'package:stackrs/routers/app_router.dart' as _i1052;
 
 extension GetItInjectableX on _i174.GetIt {
@@ -26,7 +26,7 @@ extension GetItInjectableX on _i174.GetIt {
     final injectionModule = _$InjectionModule();
     gh.factory<_i361.InterceptorsWrapper>(() => injectionModule.intercepter);
     gh.factory<_i361.Dio>(() => injectionModule.dio);
-    gh.factory<_i922.StackrsCubit>(() => _i922.StackrsCubit());
+    gh.factory<_i71.HomeCubit>(() => _i71.HomeCubit());
     gh.lazySingleton<_i1052.AppRouter>(() => injectionModule.appRouter);
     return this;
   }

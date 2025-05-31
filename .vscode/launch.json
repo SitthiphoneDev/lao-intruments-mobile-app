@@ -6,18 +6,18 @@
     "configurations": [
     
         {
-            "name": "stackrs",
+            "name": "lao-intruments",
             "request": "launch",
             "type": "dart"
         },
         {
-            "name": "stackrs (profile mode)",
+            "name": "lao-intruments (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "stackrs (release mode)",
+            "name": "lao-intruments (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"

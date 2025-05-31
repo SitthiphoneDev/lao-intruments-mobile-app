@@ -29,6 +29,7 @@ dependencies:
   retrofit: ^4.4.2
   freezed_annotation: ^3.0.0
   dfunc: ^0.10.0
+  record: ^6.0.0
 
 dev_dependencies:
   flutter_test:
