@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:stackrs/theme/app_colors.dart';
+import 'package:lao_instruments/theme/app_colors.dart';
 
 class AppThemes {
   static ThemeData main = ThemeData(

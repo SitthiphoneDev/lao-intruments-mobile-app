@@ -2,7 +2,7 @@
 
 import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
-import 'package:stackrs/DI/service_locator.dart';
+import 'package:lao_instruments/DI/service_locator.dart';
 
 class IntercepterService {
   // Private constructor
