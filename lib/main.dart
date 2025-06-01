@@ -13,13 +13,13 @@ Future<void> main() async {
       supportedLocales: const [Locale(LanguageCode.en)],
       path: "assets/translations",
       fallbackLocale: const Locale(LanguageCode.en),
-      child: const StackrsApp(),
+      child: const MyApp(),
     ),
   );
 }
 
-class StackrsApp extends StatelessWidget {
-  const StackrsApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
