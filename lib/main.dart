@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Stackrs',
+      title: 'Lao Instruments',
       theme: AppThemes.main,
       debugShowCheckedModeBanner: false,
       routerConfig: getIt<AppRouter>().config(),
