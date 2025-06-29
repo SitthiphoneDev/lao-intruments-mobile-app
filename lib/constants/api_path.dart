@@ -1,3 +1,3 @@
 class ApiPath{
-  static const String baseUrl = "http://192.168.210.235:8000";
+  static const String baseUrl = "https://lao-instrument-api.onrender.com";
 }

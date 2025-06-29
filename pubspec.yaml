@@ -44,6 +44,7 @@ dependencies:
   path_provider: ^2.1.5
   permission_handler: ^12.0.0+1
   just_audio: ^0.10.3
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +66,7 @@ flutter:
   assets:
     - assets/
     - assets/images/
+    - assets/images/instruments/
     - assets/translations/
 
   fonts:

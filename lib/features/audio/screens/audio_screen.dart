@@ -1,505 +1,229 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:just_audio/just_audio.dart' as ja;
-import 'package:lao_instruments/DI/service_locator.dart';
-import 'package:lao_instruments/constants/enums.dart';
+import 'package:easy_localization/easy_localization.dart';
+import 'package:get_it/get_it.dart';
+import 'package:lao_instruments/features/audio/models/audio_models.dart';
+import 'package:lao_instruments/features/audio/screens/detailed_instrument_screen.dart';
 import 'package:lao_instruments/features/audio/state/audio_cubit.dart';
-
-import '../widgets/waveform_widget.dart';
-import '../widgets/recording_controls.dart';
+import 'package:lao_instruments/features/audio/widgets/audio_waveform_widget.dart';
+import 'package:lao_instruments/features/audio/widgets/enhanced_file_upload_section.dart';
+import 'package:lao_instruments/features/audio/widgets/enhanced_success_result_dialog.dart';
+import 'package:lao_instruments/features/audio/widgets/prediction_results_section.dart';
+import 'package:lao_instruments/features/audio/widgets/recording_controls.dart';
+import 'package:lao_instruments/generated/locale_keys.g.dart';
+import '../../../theme/app_colors.dart';
 
 @RoutePage()
-class AudioScreen extends StatelessWidget implements AutoRouteWrapper {
+class AudioScreen extends StatelessWidget {
   const AudioScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => GetIt.instance<AudioCubit>(),
+      child: const _AudioScreenView(),
+    );
+  }
+}
+
+class _AudioScreenView extends StatefulWidget {
+  const _AudioScreenView();
+
+  @override
+  State<_AudioScreenView> createState() => _AudioScreenViewState();
+}
+
+class _AudioScreenViewState extends State<_AudioScreenView>
+    with TickerProviderStateMixin {
+  late PageController _pageController;
+  late AnimationController _fabAnimationController;
+  late Animation<double> _fabAnimation;
+  late ScrollController _scrollController;
   
-  Widget wrappedRoute(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (context) => getIt<AudioCubit>()..initialize()),
-      ],
-      child: this,
+  int _currentPage = 0;
+  bool _showFab = false;
+  String? _lastResultId; // Track last result to prevent duplicates
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _scrollController = ScrollController();
+    _fabAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fabAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fabAnimationController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _scrollController.dispose();
+    _fabAnimationController.dispose();
+    super.dispose();
+  }
+
+  void _onPageChanged(int page) {
+    setState(() {
+      _currentPage = page;
+    });
+  }
+
+  void _navigateToPage(int page) {
+    _pageController.animateToPage(
+      page,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: _buildAppBar(context),
-      body: BlocListener<AudioCubit, AudioState>(
-        listener: (context, state) {
-          if (state.errors != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
+    return BlocConsumer<AudioCubit, AudioState>(
+      listener: (context, state) {
+        // Error handling
+        if (state.status == AudioStatus.failure && state.errors != null) {
+          _showErrorSnackBar(context, state.errors!);
+        }
+        
+        // Success handling - Auto navigate to results page and show dialog
+        if (state.status == AudioStatus.success && state.predictionResult != null) {
+          // Check for duplicates
+          final resultId = '${state.predictionResult!.instrument}_${state.predictionResult!.confidence}';
+          if (_lastResultId == resultId) return;
+          _lastResultId = resultId;
+          
+          // Check if it's unknown instrument
+          if (state.predictionResult!.instrument.toLowerCase() == 'unknown') {
+            _showUnknownInstrumentDialog(state.predictionResult!);
+          } else {
+            // First navigate to results page
+            _navigateToPage(1);
+            // Then show success dialog after a brief delay
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                _showEnhancedSuccessDialog(state.predictionResult!);
+              }
+            });
+          }
+        }
+
+        // Auto scroll to analyzing indicator when analysis starts
+        if (state.status == AudioStatus.analyzing) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && _scrollController.hasClients) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 800),
+                curve: Curves.easeInOut,
+              );
+            }
+          });
+        }
+
+        // Show/hide FAB based on results
+        final shouldShowFab = state.predictionResult != null;
+        if (shouldShowFab != _showFab) {
+          setState(() {
+            _showFab = shouldShowFab;
+          });
+          if (shouldShowFab) {
+            _fabAnimationController.forward();
+          } else {
+            _fabAnimationController.reverse();
+          }
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: AppColors.lightGrey,
+          appBar: _buildAppBar(context, state),
+          body: Column(
+            children: [
+              // Custom Tab Bar
+              _buildCustomTabBar(),
+              
+              // Page Content
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: _onPageChanged,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(state.errors!)),
+                    _buildRecordingPage(state),
+                    _buildResultsPage(state),
                   ],
                 ),
-                backgroundColor: Colors.red[600],
-                behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(
-                  label: 'Dismiss',
-                  textColor: Colors.white,
-                  onPressed: () => context.read<AudioCubit>().clearErrors(),
-                ),
               ),
-            );
-          }
-          if (state.recordingState == RecordingState.completed && 
-        state.hasAudioData && 
-        !state.isUploading &&
-        state.predictionResult == null) {
-      
-      // Show auto-predict notification
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.auto_awesome, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Auto-analyzing recording...'),
             ],
           ),
-          backgroundColor: Colors.green[600],
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      
-      // Trigger auto-prediction
-      context.read<AudioCubit>().predictInstrument();
-    }
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header Info
-              _buildHeaderInfo(),
-              
-              const SizedBox(height: 20),
-
-              // Status Card
-              _buildStatusCard(),
-
-              const SizedBox(height: 20),
-
-              // Waveform Display
-              _buildWaveformSection(),
-
-              const SizedBox(height: 20),
-
-              // Recording Controls
-              const RecordingControls(),
-
-              const SizedBox(height: 20),
-
-              // Current Audio Info
-              _buildCurrentAudioInfo(),
-
-              const SizedBox(height: 20),
-
-              // Predict Button
-              _buildPredictButton(),
-
-              const SizedBox(height: 20),
-
-              // Prediction Results
-              _buildPredictionResults(),
-            ],
-          ),
-        ),
-      ),
+          floatingActionButton: const SizedBox.shrink(), // Removed FAB
+        );
+      },
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, AudioState state) {
     return AppBar(
-      title: const Row(
-        children: [
-          Icon(Icons.music_note, color: Colors.white),
-          SizedBox(width: 8),
-          Text('Lao Instrument Classifier'),
-        ],
-      ),
-      backgroundColor: Colors.deepPurple,
-      foregroundColor: Colors.white,
+      title: Text('audio.title'.tr()),
+      backgroundColor: AppColors.primaryRed,
       elevation: 0,
       actions: [
         IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: () {
+            context.read<AudioCubit>().reset();
+            _navigateToPage(0);
+          },
+          tooltip: LocaleKeys.audio_reset.tr(),
+        ),
+        IconButton(
           icon: const Icon(Icons.info_outline),
-          onPressed: () => _showInfoDialog(context),
+          onPressed: () => _showAppInfo(context),
+          tooltip: LocaleKeys.audio_app_info.tr(),
         ),
       ],
     );
   }
 
-  Widget _buildHeaderInfo() {
+  Widget _buildCustomTabBar() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.deepPurple[400]!, Colors.deepPurple[600]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.deepPurple.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '🎵 AI-Powered Recognition',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Identify traditional Lao musical instruments using advanced machine learning',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-Widget _buildStatusCard() {
-  return BlocBuilder<AudioCubit, AudioState>(
-    builder: (context, state) {
-      return Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              colors: [Colors.white, Colors.grey[50]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.radio_button_checked, color: Colors.deepPurple[600]),
-                  const SizedBox(width: 8),
-                  Text(
-                    'System Status',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple[600],
-                    ),
-                  ),
-                  // Show auto-predict indicator
-                  if (state.recordingState == RecordingState.completed && state.predictionResult != null)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.green[100],
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.green[300]!),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.auto_awesome, size: 12, color: Colors.green[700]),
-                          const SizedBox(width: 2),
-                          Text(
-                            'AUTO',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(state.recordingState).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _getStatusColor(state.recordingState).withOpacity(0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _getStatusIcon(state.recordingState),
-                      color: _getStatusColor(state.recordingState),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _getStatusText(state.recordingState),
-                        style: TextStyle(
-                          color: _getStatusColor(state.recordingState),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    // Show auto-predict status
-                    if (state.recordingState == RecordingState.completed && 
-                        state.predictionResult != null)
-                      Text(
-                        '• Auto-analyzed',
-                        style: TextStyle(
-                          color: Colors.green[600],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (state.currentSource != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        state.currentSource == AudioSource.recording 
-                          ? Icons.mic 
-                          : Icons.file_upload,
-                        size: 16,
-                        color: Colors.blue[700],
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Source: ${state.currentSource == AudioSource.recording ? "Recording" : "Imported File"}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
-
-  Widget _buildWaveformSection() {
-    return BlocBuilder<AudioCubit, AudioState>(
-      builder: (context, state) {
-        return Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.graphic_eq, color: Colors.deepPurple[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Audio Waveform',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple[600],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.grey[100]!, Colors.grey[50]!],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: WaveformWidget(
-                      waveformData: state.waveformData,
-                      color: state.isRecording 
-                        ? Colors.red[600]! 
-                        : Colors.deepPurple[600]!,
-                      height: 100,
-                    ),
-                  ),
-                ),
-                if (state.waveformData.isEmpty)
-                  Container(
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.graphic_eq, size: 40, color: Colors.grey[400]),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No audio data',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCurrentAudioInfo() {
-    return BlocBuilder<AudioCubit, AudioState>(
-      builder: (context, state) {
-        final audio = state.currentSource == AudioSource.recording
-            ? state.currentRecording
-            : state.selectedFile;
-
-        if (audio == null) return const SizedBox.shrink();
-
-        return Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.audiotrack, color: Colors.deepPurple[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Current Audio',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple[600],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                
-                // Audio Details
-                if (audio.fileName != null)
-                  _buildInfoRow(Icons.music_note, 'File', audio.fileName!),
-                
-                if (audio.duration != Duration.zero)
-                  _buildInfoRow(Icons.timer, 'Duration', '${audio.duration.inSeconds} seconds'),
-                
-                if (audio.fileSize != null)
-                  _buildInfoRow(Icons.storage, 'Size', '${(audio.fileSize! / 1024).toStringAsFixed(1)} KB'),
-                
-                const SizedBox(height: 16),
-                
-                // Play Button
-                if (audio.path != null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play Audio'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () async {
-                        try {
-                          final player = ja.AudioPlayer();
-                          await player.setFilePath(audio.path!);
-                          await player.play();
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error playing audio: $e'),
-                                backgroundColor: Colors.red[600],
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.grey[600]),
-          const SizedBox(width: 12),
-          Text(
-            '$label: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              color: Colors.grey,
+          Expanded(
+            child: _buildTabButton(
+              index: 0,
+              icon: Icons.mic,
+              label: LocaleKeys.audio_record_tab.tr(),
+              isActive: _currentPage == 0,
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            child: _buildTabButton(
+              index: 1,
+              icon: Icons.analytics,
+              label: LocaleKeys.audio_results_tab.tr(),
+              isActive: _currentPage == 1,
             ),
           ),
         ],
@@ -507,372 +231,260 @@ Widget _buildStatusCard() {
     );
   }
 
-Widget _buildPredictButton() {
-  return BlocBuilder<AudioCubit, AudioState>(
-    builder: (context, state) {
-      final isEnabled = state.hasAudioData && !state.isUploading;
-      final hasResult = state.predictionResult != null;
-      
-      return Container(
+  Widget _buildTabButton({
+    required int index,
+    required IconData icon,
+    required String label,
+    required bool isActive,
+  }) {
+    return GestureDetector(
+      onTap: () => _navigateToPage(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          gradient: isEnabled 
-            ? LinearGradient(
-                colors: [Colors.deepPurple[400]!, Colors.deepPurple[600]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
+          gradient: isActive ? AppColors.redGradient : null,
+          color: isActive ? null : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: isEnabled ? [
+          boxShadow: isActive ? [
             BoxShadow(
-              color: Colors.deepPurple.withOpacity(0.3),
+              color: AppColors.primaryRed.withOpacity(0.3),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ] : null,
         ),
-        child: ElevatedButton(
-          onPressed: isEnabled 
-            ? () => context.read<AudioCubit>().predictInstrument()
-            : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? AppColors.white : AppColors.grey,
+              size: 20,
             ),
-          ),
-          child: state.isUploading
-            ? const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                  Text(
-                    'Analyzing Audio...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    hasResult ? Icons.refresh : Icons.auto_awesome,
-                    color: isEnabled ? Colors.white : Colors.grey,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    hasResult ? 'Re-analyze Audio' : 'Predict Instrument',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isEnabled ? Colors.white : Colors.grey,
-                    ),
-                  ),
-                  if (hasResult && state.recordingState == RecordingState.completed)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'AUTO',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                ],
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                color: isActive ? AppColors.white : AppColors.grey,
               ),
+            ),
+          ],
         ),
-      );
-    },
-  );
-}
-
-  Widget _buildPredictionResults() {
-    return BlocBuilder<AudioCubit, AudioState>(
-      builder: (context, state) {
-        if (state.predictionResult == null) return const SizedBox.shrink();
-
-        final result = state.predictionResult!;
-        
-        return Card(
-          elevation: 6,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: [Colors.white, Colors.blue[50]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.analytics, color: Colors.blue[600]),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Prediction Results',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      onPressed: () => context.read<AudioCubit>().clearPrediction(),
-                      icon: const Icon(Icons.close),
-                      iconSize: 20,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey[200],
-                        foregroundColor: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 20),
-
-                // Main Prediction Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.green[400]!, Colors.green[600]!],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.green.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.music_note, color: Colors.white, size: 28),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _getInstrumentDisplayName(result.instrument),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.trending_up, color: Colors.white, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Confidence: ${(result.confidence * 100).toStringAsFixed(1)}%',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              result.confidenceCategory,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Uncertainty Warning
-                if (result.isUncertain)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber, color: Colors.orange[600]),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Uncertain prediction - consider recording in a quieter environment',
-                            style: TextStyle(
-                              color: Colors.orange[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                if (result.isUncertain) const SizedBox(height: 16),
-
-                // Detailed Metrics
-                Row(
-                  children: [
-                    Icon(Icons.insights, color: Colors.blue[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Detailed Analysis',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[600],
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-
-                // Metrics Grid
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildMetricCard(
-                        'Segments',
-                        '${result.segmentsUsed}',
-                        Icons.graphic_eq,
-                        Colors.purple,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildMetricCard(
-                        'Entropy',
-                        result.entropy.toStringAsFixed(2),
-                        Icons.scatter_plot,
-                        Colors.orange,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildMetricCard(
-                        'Time',
-                        '${result.processingTimeMs.toStringAsFixed(0)}ms',
-                        Icons.timer,
-                        Colors.teal,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                // All Probabilities
-                Row(
-                  children: [
-                    Icon(Icons.bar_chart, color: Colors.blue[600]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'All Predictions',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[600],
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 12),
-
-                // Sort probabilities by value
-                ...(() {
-                  final entries = result.probabilities.entries.toList()
-                    ..sort((a, b) => b.value.compareTo(a.value));
-                  return entries
-                      .map((entry) => _buildProbabilityRow(entry.key, entry.value))
-                      .toList();
-                })(),
-              ],
-            ),
-          ),
-        );
-      },
+      ),
     );
   }
 
-  Widget _buildMetricCard(String label, String value, IconData icon, Color color) {
+  Widget _buildFloatingActionButton(AudioState state) {
+    if (!_showFab || state.predictionResult == null) {
+      return const SizedBox.shrink();
+    }
+
+    return ScaleTransition(
+      scale: _fabAnimation,
+      child: FloatingActionButton.extended(
+        onPressed: () => _navigateToDetailedInstrumentScreen(state.predictionResult!),
+        backgroundColor: AppColors.primaryGold,
+        foregroundColor: AppColors.white,
+        icon: const Icon(Icons.school),
+        label: Text(LocaleKeys.audio_learn_more.tr()),
+      ),
+    );
+  }
+
+  // Page 1: Recording Interface
+  Widget _buildRecordingPage(AudioState state) {
+    return SingleChildScrollView(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Enhanced Instructions Card
+          _buildEnhancedInstructionsCard(),
+          const SizedBox(height: 20),
+
+          // Recording Section
+          const RecordingSection(),
+          const SizedBox(height: 20),
+
+          // Enhanced File Upload Section
+          const EnhancedFileUploadSection(),
+          const SizedBox(height: 20),
+
+          // Audio Waveform with enhanced styling
+          if (state.recordingPath != null || state.selectedFile != null)
+            _buildEnhancedAudioSection(state),
+
+          if (state.recordingPath != null || state.selectedFile != null)
+            const SizedBox(height: 20),
+
+          // Enhanced Loading Indicator
+          if (state.status == AudioStatus.analyzing)
+            _buildEnhancedAnalyzingIndicator(),
+
+          // Quick action to view last result
+          if (state.predictionResult != null && _currentPage == 0)
+            _buildQuickResultPreview(state.predictionResult!),
+        ],
+      ),
+    );
+  }
+
+  // Page 2: Results Interface
+  Widget _buildResultsPage(AudioState state) {
+    if (state.predictionResult == null) {
+      return _buildNoResultsPage();
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Detailed Results (Main component)
+          PredictionResultsSection(
+            result: state.predictionResult!,
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // Action Buttons
+          _buildResultActionButtons(state.predictionResult!),
+          
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResultsPage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+              color: AppColors.lightGrey.withOpacity(0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.analytics_outlined,
+              size: 80,
+              color: AppColors.grey.withOpacity(0.5),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          Text(
+            LocaleKeys.audio_no_results_title.tr(),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.grey,
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          Text(
+            LocaleKeys.audio_no_results_desc.tr(),
+            style: const TextStyle(
+              fontSize: 16,
+              color: AppColors.grey,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          
+          const SizedBox(height: 32),
+          
+          ElevatedButton.icon(
+            onPressed: () => _navigateToPage(0),
+            icon: const Icon(Icons.mic, color: AppColors.white),
+            label: Text(
+              LocaleKeys.audio_start_recording.tr(),
+              style: const TextStyle(color: AppColors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickResultPreview(PredictionResult result) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        gradient: AppColors.goldGradient,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryGold.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.celebration, color: AppColors.white, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                LocaleKeys.audio_latest_result.tr(),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.white,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _navigateToPage(1),
+                child: const Icon(Icons.arrow_forward, color: AppColors.white),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 12),
+          
           Text(
-            value,
-            style: TextStyle(
-              color: color,
+            _getInstrumentName(result.instrument),
+            style: const TextStyle(
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              fontSize: 14,
+              color: AppColors.white,
             ),
           ),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
+          
+          const SizedBox(height: 8),
+          
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              LocaleKeys.audio_confidence_percent.tr(args: [(result.confidence * 100).toStringAsFixed(1)]),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppColors.white,
+              ),
             ),
           ),
         ],
@@ -880,61 +492,262 @@ Widget _buildPredictButton() {
     );
   }
 
-  Widget _buildProbabilityRow(String instrument, double probability) {
-    final isTopPrediction = probability > 0.3;
-    final displayName = _getInstrumentDisplayName(instrument);
-    
+  Widget _buildResultHeaderCard(PredictionResult result) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: _getInstrumentGradient(result.instrument),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryRed.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  _getInstrumentEmoji(result.instrument),
+                  style: const TextStyle(fontSize: 32),
+                ),
+              ),
+              
+              const SizedBox(width: 16),
+              
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'audio.results_title'.tr(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.white,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 4),
+                    
+                    Text(
+                      _getInstrumentName(result.instrument),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.white,
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        LocaleKeys.audio_confidence_percent.tr(args: [(result.confidence * 100).toStringAsFixed(1)]),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultActionButtons(PredictionResult result) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            LocaleKeys.audio_actions.tr(),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.darkGrey,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Learn More Button (Full Width)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _navigateToDetailedInstrumentScreen(result),
+              icon: const Icon(Icons.school, color: AppColors.white),
+              label: Text(
+                LocaleKeys.audio_learn_more.tr(),
+                style: const TextStyle(color: AppColors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Try Another Recording Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                context.read<AudioCubit>().reset();
+                _lastResultId = null; // Reset duplicate prevention
+                _navigateToPage(0);
+              },
+              icon: const Icon(Icons.refresh, color: AppColors.white),
+              label: Text(
+                LocaleKeys.audio_try_another.tr(),
+                style: const TextStyle(color: AppColors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryRed,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedInstructionsCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: AppColors.goldGradient,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryGold.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.lightbulb_outline,
+                  color: AppColors.darkGrey,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'audio.instructions_title'.tr(),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.darkGrey,
+                      ),
+                    ),
+                    Text(
+                      LocaleKeys.audio_instructions_subtitle.tr(),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.darkGrey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildEnhancedInstructionItem('🎙️', LocaleKeys.audio_instruction_1.tr()),
+          _buildEnhancedInstructionItem('🔇', LocaleKeys.audio_instruction_2.tr()),
+          _buildEnhancedInstructionItem('⏱️', LocaleKeys.audio_instruction_3.tr())
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedInstructionItem(String emoji, String text) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isTopPrediction ? Colors.blue[50] : Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isTopPrediction ? Colors.blue[200]! : Colors.grey[200]!,
-        ),
+        color: AppColors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          Icon(
-            _getInstrumentIcon(instrument),
-            color: isTopPrediction ? Colors.blue[600] : Colors.grey[600],
-            size: 20,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(emoji, style: const TextStyle(fontSize: 18)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            flex: 2,
             child: Text(
-              displayName,
-              style: TextStyle(
-                fontWeight: isTopPrediction ? FontWeight.bold : FontWeight.normal,
-                color: isTopPrediction ? Colors.blue[700] : Colors.grey[700],
+              text,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.darkGrey,
+                fontWeight: FontWeight.w500,
+                height: 1.3,
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 3,
-            child: LinearProgressIndicator(
-              value: probability,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                isTopPrediction ? Colors.blue[600]! : Colors.grey[500]!,
-              ),
-              minHeight: 6,
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 60,
-            child: Text(
-              '${(probability * 100).toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isTopPrediction ? Colors.blue[700] : Colors.grey[600],
-              ),
-              textAlign: TextAlign.end,
             ),
           ),
         ],
@@ -942,127 +755,503 @@ Widget _buildPredictButton() {
     );
   }
 
-  String _getInstrumentDisplayName(String instrument) {
-    switch (instrument.toLowerCase()) {
-      case 'khean':
-        return '🎵 Khaen (ແຄນ)';
-      case 'khong_vong':
-        return '🥁 Khong Wong (ຄ້ອງວົງ)';
-      case 'pin':
-        return '🎸 Pin (ພິນ)';
-      case 'ranad':
-        return '🎹 Ranad (ລະນາດ)';
-      case 'saw':
-        return '🎻 So U (ຊໍອູ້)';
-      case 'sing':
-        return '🥁 Sing (ຊິ່ງ)';
-      case 'unknown':
-        return '❓ Unknown Sound';
-      default:
-        return '🎵 ${instrument.replaceAll('_', ' ').toUpperCase()}';
-    }
+  Widget _buildEnhancedAudioSection(AudioState state) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(15),
+                topRight: Radius.circular(15),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.audiotrack, color: AppColors.primaryBlue, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'audio.audio_preview'.tr(),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.darkGrey,
+                        ),
+                      ),
+                      Text(
+                        state.fileName ?? LocaleKeys.audio_recorded_audio.tr(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (state.audioDuration != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBlue.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      LocaleKeys.audio_duration_seconds.tr(args: [state.audioDuration!.toStringAsFixed(1)]),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Waveform
+          AudioWaveformWidget(
+            audioPath: state.recordingPath ?? state.selectedFile?.path,
+          ),
+        ],
+      ),
+    );
   }
 
-  IconData _getInstrumentIcon(String instrument) {
-    switch (instrument.toLowerCase()) {
-      case 'khean':
-        return Icons.air;
-      case 'khong_vong':
-        return Icons.radio_button_on;
-      case 'pin':
-        return Icons.music_note;
-      case 'ranad':
-        return Icons.piano;
-      case 'saw':
-        return Icons.graphic_eq;
-      case 'sing':
-        return Icons.album;
-      case 'unknown':
-        return Icons.help_outline;
-      default:
-        return Icons.music_note;
-    }
+  Widget _buildEnhancedAnalyzingIndicator() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Animated AI Icon
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: AppColors.blueGradient,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryBlue.withOpacity(0.3),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.psychology,
+              color: AppColors.white,
+              size: 48,
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Progress indicator
+          const SizedBox(
+            width: 200,
+            child: LinearProgressIndicator(
+              backgroundColor: AppColors.lightGrey,
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBlue),
+              minHeight: 6,
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          Text(
+            'audio.analyzing'.tr(),
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.darkGrey,
+            ),
+          ),
+          
+          const SizedBox(height: 8),
+          
+          Text(
+            'audio.analyzing_desc'.tr(),
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.grey,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
-  void _showInfoDialog(BuildContext context) {
+  // All your existing helper methods...
+  void _showUnknownInstrumentDialog(PredictionResult result) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Row(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
           children: [
-            Icon(Icons.info, color: Colors.blue),
-            SizedBox(width: 8),
-            Text('About This App'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.help_outline,
+                color: AppColors.warning,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              LocaleKeys.audio_unknown_instrument.tr(),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.darkGrey,
+              ),
+            ),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'This AI-powered app recognizes traditional Lao musical instruments:',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            const Text(
+              '🤔',
+              style: TextStyle(fontSize: 48),
             ),
-            SizedBox(height: 12),
-            Text('• Khaen (ແຄນ) - Mouth organ'),
-            Text('• Khong Wong (ຄ້ອງວົງ) - Gong circle'),
-            Text('• Pin (ພິນ) - Plucked string instrument'),
-            Text('• Ranad (ລະນາດ) - Wooden xylophone'),
-            Text('• So U (ຊໍອູ້) - Bowed string instrument'),
-            Text('• Sing (ຊິ່ງ) - Small cymbals'),
-            SizedBox(height: 12),
+            const SizedBox(height: 16),
             Text(
-              'For best results:\n• Record clear, isolated instrument sounds\n• Minimize background noise\n• Record for at least 3-4 seconds',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              LocaleKeys.audio_unknown_message.tr(),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkGrey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              LocaleKeys.audio_unknown_reasons.tr(),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.grey,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.lightGrey,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lightbulb, color: AppColors.primaryGold, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      LocaleKeys.audio_unknown_tip.tr(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.darkGrey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Got it'),
+            onPressed: () {
+              Navigator.of(context).pop();
+              _navigateToPage(1); // Still show results
+            },
+            child: Text(
+              LocaleKeys.audio_view_details.tr(),
+              style: const TextStyle(color: AppColors.primaryBlue),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              context.read<AudioCubit>().reset();
+              _lastResultId = null; // Reset duplicate prevention
+              _navigateToPage(0);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryRed,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Text(
+              LocaleKeys.audio_try_again.tr(),
+              style: const TextStyle(color: AppColors.white),
+            ),
           ),
         ],
       ),
     );
   }
 
-  IconData _getStatusIcon(RecordingState state) {
-    switch (state) {
-      case RecordingState.idle:
-        return Icons.mic_none;
-      case RecordingState.recording:
-        return Icons.mic;
-      case RecordingState.paused:
-        return Icons.pause;
-      case RecordingState.completed:
-        return Icons.check_circle;
+  void _showEnhancedSuccessDialog(PredictionResult result) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => EnhancedSuccessResultDialog(
+        result: result,
+        onViewFullDetails: () {
+          Navigator.of(context).pop();
+        },
+        onLearnMore: () {
+          Navigator.of(context).pop();
+          _navigateToDetailedInstrumentScreen(result);
+        },
+        onShareResult: () {
+          Navigator.of(context).pop();
+          _shareResult(result);
+        },
+      ),
+    );
+  }
+
+  void _navigateToDetailedInstrumentScreen(PredictionResult result) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DetailedInstrumentScreen(
+          instrumentId: result.instrument,
+          predictionResult: result,
+        ),
+      ),
+    );
+  }
+
+  void _shareResult(PredictionResult result) {
+    final instrumentName = _getInstrumentName(result.instrument);
+    final confidence = (result.confidence * 100).toStringAsFixed(1);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(LocaleKeys.audio_sharing_result.tr(args: [instrumentName, confidence])),
+        backgroundColor: AppColors.primaryBlue,
+        action: SnackBarAction(
+          label: LocaleKeys.audio_share.tr(),
+          textColor: AppColors.white,
+          onPressed: () {
+            // TODO: Implement actual sharing functionality
+          },
+        ),
+      ),
+    );
+  }
+
+  String _getInstrumentName(String instrument) {
+    switch (instrument.toLowerCase()) {
+      case 'khean':
+      case 'khaen':
+        return LocaleKeys.instrument_khaen_name.tr();
+      case 'khong_vong':
+      case 'khong':
+        return LocaleKeys.instrument_khong_name.tr();
+      case 'pin':
+        return LocaleKeys.instrument_pin_name.tr();
+      case 'ranad':
+        return LocaleKeys.instrument_ranad_name.tr();
+      case 'saw':
+      case 'so':
+        return LocaleKeys.instrument_so_name.tr();
+      case 'sing':
+        return LocaleKeys.instrument_sing_name.tr();
+      case 'unknown':
+        return LocaleKeys.instrument_unknown_name.tr();
+      default:
+        return instrument;
     }
   }
 
-  Color _getStatusColor(RecordingState state) {
-    switch (state) {
-      case RecordingState.idle:
-        return Colors.grey;
-      case RecordingState.recording:
-        return Colors.red;
-      case RecordingState.paused:
-        return Colors.orange;
-      case RecordingState.completed:
-        return Colors.green;
+  String _getInstrumentEmoji(String instrument) {
+    switch (instrument.toLowerCase()) {
+      case 'khean':
+      case 'khaen':
+        return '🎵';
+      case 'khong_vong':
+      case 'khong':
+        return '🥁';
+      case 'pin':
+        return '🎸';
+      case 'ranad':
+        return '🎹';
+      case 'saw':
+      case 'so':
+        return '🎻';
+      case 'sing':
+        return '🔔';
+      default:
+        return '🎶';
     }
   }
 
-  String _getStatusText(RecordingState state) {
-    switch (state) {
-      case RecordingState.idle:
-        return 'Ready to record';
-      case RecordingState.recording:
-        return 'Recording...';
-      case RecordingState.paused:
-        return 'Recording paused';
-      case RecordingState.completed:
-        return 'Recording completed';
+  LinearGradient _getInstrumentGradient(String instrument) {
+    switch (instrument.toLowerCase()) {
+      case 'khean':
+      case 'khaen':
+        return AppColors.blueGradient;
+      case 'khong_vong':
+      case 'khong':
+        return AppColors.redGradient;
+      case 'pin':
+        return AppColors.goldGradient;
+      case 'ranad':
+        return LinearGradient(
+          colors: [Colors.purple.shade400, Colors.purple.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case 'saw':
+      case 'so':
+        return LinearGradient(
+          colors: [Colors.green.shade400, Colors.green.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      case 'sing':
+        return LinearGradient(
+          colors: [Colors.orange.shade400, Colors.orange.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
+      default:
+        return LinearGradient(
+          colors: [AppColors.grey, AppColors.darkGrey],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        );
     }
+  }
+
+  void _showErrorSnackBar(BuildContext context, String error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                error,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.error,
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        action: SnackBarAction(
+          label: LocaleKeys.audio_retry.tr(),
+          textColor: AppColors.white,
+          onPressed: () => context.read<AudioCubit>().reset(),
+        ),
+      ),
+    );
+  }
+
+  void _showAppInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.info_outline, color: AppColors.primaryBlue),
+            ),
+            const SizedBox(width: 12),
+            Text(LocaleKeys.audio_app_info.tr()),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              LocaleKeys.audio_app_name.tr(),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(LocaleKeys.audio_app_version.tr()),
+            const SizedBox(height: 16),
+            Text(
+              LocaleKeys.audio_app_description.tr(),
+              style: const TextStyle(height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              LocaleKeys.audio_supported_instruments.tr(),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(LocaleKeys.audio_instruments_list.tr()),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(LocaleKeys.audio_close.tr()),
+          ),
+        ],
+      ),
+    );
   }
 }

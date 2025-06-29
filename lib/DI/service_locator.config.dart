@@ -39,7 +39,7 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i962.AudioRepository>(
         () => _i962.AudioRepositoryImpl(gh<_i1000.AudioApiClient>()));
     gh.factory<_i719.AudioCubit>(
-        () => _i719.AudioCubit(repository: gh<_i962.AudioRepository>()));
+        () => _i719.AudioCubit(gh<_i962.AudioRepository>()));
     return this;
   }
 }

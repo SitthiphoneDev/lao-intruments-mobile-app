@@ -1,18 +1,15 @@
-import 'dart:async';
 import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:injectable/injectable.dart';
-import 'package:lao_instruments/constants/enums.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:lao_instruments/features/audio/data/audio_repositiory.dart';
-import 'package:lao_instruments/features/audio/models/audio_models.dart';
-import 'package:lao_instruments/features/audio/models/audio_recording.dart';
-import 'package:lao_instruments/features/audio/models/model_info.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:file_picker/file_picker.dart';
+
+import '../models/audio_models.dart';
 
 part 'audio_state.dart';
 part 'audio_cubit.freezed.dart';
@@ -21,51 +18,31 @@ part 'audio_cubit.freezed.dart';
 class AudioCubit extends Cubit<AudioState> {
   final AudioRepository _repository;
   final AudioRecorder _recorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
-  Timer? _recordingTimer;
-  Timer? _waveformTimer;
-  StreamSubscription<Amplitude>? _amplitudeSubscription;
+  AudioCubit(this._repository) : super(const AudioState());
 
-  AudioCubit({required AudioRepository repository})
-    : _repository = repository,
-      super(const AudioState());
-
-  Future<void> initialize() async {
-    emit(state.copyWith(isLoading: true));
-
-    try {
-      await _checkMicrophonePermission();
-      // await _loadModelInfo();
-      // await _loadSupportedInstruments();
-    } catch (e) {
-      emit(state.copyWith(errors: e.toString()));
-    } finally {
-      emit(state.copyWith(isLoading: false));
-    }
-  }
-
-  Future<void> _checkMicrophonePermission() async {
-    final status = await Permission.microphone.request();
-    emit(state.copyWith(hasPermission: status.isGranted));
-  }
-
+  // ບັນທຶກສຽງ
   Future<void> startRecording() async {
-    if (!state.canRecord) return;
     try {
-      emit(
-        state.copyWith(
-          recordingState: RecordingState.recording,
-          recordingDuration: Duration.zero,
-          waveformData: [],
-          errors: null,
-          currentSource: AudioSource.recording,
-        ),
-      );
+      emit(state.copyWith(status: AudioStatus.recording, errors: null));
 
+      // ກວດສອບການອະນຸຍາດ
+      final permission = await Permission.microphone.request();
+      if (!permission.isGranted) {
+        emit(state.copyWith(
+          status: AudioStatus.failure,
+          errors: 'ຕ້ອງການການອະນຸຍາດໃຊ້ໄມໂຄຣໂຟນ',
+        ));
+        return;
+      }
+
+      // ສ້າງ path ສຳລັບບັນທຶກ
       final directory = await getTemporaryDirectory();
       final fileName = 'recording_${DateTime.now().millisecondsSinceEpoch}.wav';
       final filePath = '${directory.path}/$fileName';
 
+      // ເລີ່ມບັນທຶກ
       await _recorder.start(
         const RecordConfig(
           encoder: AudioEncoder.wav,
@@ -75,252 +52,214 @@ class AudioCubit extends Cubit<AudioState> {
         path: filePath,
       );
 
-      _startRecordingTimer();
-      _startWaveformMonitoring();
+      emit(state.copyWith(
+        status: AudioStatus.recording,
+        recordingPath: filePath,
+      ));
+
+      // ຢຸດອັດຕະໂນມັດຫຼັງ 8 ວິນາທີ
+      await Future.delayed(const Duration(seconds: 8));
+      await stopRecording();
+
     } catch (e) {
-      emit(
-        state.copyWith(
-          recordingState: RecordingState.idle,
-          errors: 'Failed to start recording: $e',
-        ),
-      );
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: 'ເກີດຂໍ້ຜິດພາດໃນການບັນທຶກ: ${e.toString()}',
+      ));
     }
-  }
-
-  void _startRecordingTimer() {
-    _recordingTimer = Timer.periodic(const Duration(milliseconds: 100), (
-      timer,
-    ) {
-      final newDuration = Duration(milliseconds: timer.tick * 100);
-
-      if (newDuration >= state.maxRecordingDuration) {
-        stopRecording();
-        return;
-      }
-
-      emit(state.copyWith(recordingDuration: newDuration));
-    });
-  }
-
-  void _startWaveformMonitoring() {
-    _waveformTimer = Timer.periodic(const Duration(milliseconds: 50), (
-      timer,
-    ) async {
-      try {
-        final amplitude = await _recorder.getAmplitude();
-        final waveformValue =
-            (amplitude.current + 80) / 80; // Normalize -80dB to 0dB to 0-1
-        final clampedValue = waveformValue.clamp(0.0, 1.0);
-
-        final currentWaveform = List<double>.from(state.waveformData);
-        currentWaveform.add(clampedValue);
-
-        // Keep only last 100 values for performance
-        if (currentWaveform.length > 100) {
-          currentWaveform.removeAt(0);
-        }
-
-        emit(state.copyWith(waveformData: currentWaveform));
-      } catch (e) {
-        // Ignore amplitude errorss during recording
-      }
-    });
   }
 
   Future<void> stopRecording() async {
-    if (!state.isRecording) return;
-
     try {
-      _recordingTimer?.cancel();
-      _waveformTimer?.cancel();
-      _amplitudeSubscription?.cancel();
-
       final path = await _recorder.stop();
-
       if (path != null) {
-        final file = File(path);
-        final fileSize = await file.length();
-
-        final recording = AudioRecording(
-          path: path,
-          duration: state.recordingDuration,
-          createdAt: DateTime.now(),
-          fileName: path.split('/').last,
-          fileSize: fileSize,
-        );
-
-        emit(
-          state.copyWith(
-            recordingState: RecordingState.completed,
-            currentRecording: recording,
-          ),
-        );
-      } else {
-        emit(
-          state.copyWith(
-            recordingState: RecordingState.idle,
-            errors: 'Failed to save recording',
-          ),
-        );
+        emit(state.copyWith(
+          status: AudioStatus.recorded,
+          recordingPath: path,
+        ));
+        
+        // ວິເຄາະອັດຕະໂນມັດ
+        await _predictFromFiles(File(path));
       }
     } catch (e) {
-      emit(
-        state.copyWith(
-          recordingState: RecordingState.idle,
-          errors: 'Failed to stop recording: $e',
-        ),
-      );
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: 'ເກີດຂໍ້ຜິດພາດໃນການຢຸດບັນທຶກ: ${e.toString()}',
+      ));
     }
   }
 
-  Future<void> pauseRecording() async {
-    if (!state.isRecording) return;
-
+  // ເລືອກໄຟລ໌ຈາກໂທລະສັບ
+  Future<void> pickAudioFile() async {
     try {
-      await _recorder.pause();
-      _recordingTimer?.cancel();
-      _waveformTimer?.cancel();
-
-      emit(state.copyWith(recordingState: RecordingState.paused));
-    } catch (e) {
-      emit(state.copyWith(errors: 'Failed to pause recording: $e'));
-    }
-  }
-
-  Future<void> resumeRecording() async {
-    if (state.recordingState != RecordingState.paused) return;
-
-    try {
-      await _recorder.resume();
-      emit(state.copyWith(recordingState: RecordingState.recording));
-
-      _startRecordingTimer();
-      _startWaveformMonitoring();
-    } catch (e) {
-      emit(state.copyWith(errors: 'Failed to resume recording: $e'));
-    }
-  }
-
-  Future<void> selectAudioFile() async {
-    try {
-      emit(state.copyWith(isLoading: true, errors: null));
+      emit(state.copyWith(status: AudioStatus.loading, errors: null));
 
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['mp3', 'wav'],
-        allowMultiple: false,
+        type: FileType.audio,
+        allowedExtensions: ['wav', 'mp3', 'ogg', 'm4a', 'flac'],
       );
 
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-        final filePath = file.path;
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final fileName = result.files.single.name;
+        final fileSize = result.files.single.size;
 
-        if (filePath != null) {
-          final audioFile = File(filePath);
-          final fileSize = await audioFile.length();
+        emit(state.copyWith(
+          status: AudioStatus.fileSelected,
+          selectedFile: file,
+          fileName: fileName,
+          fileSize: fileSize,
+        ));
 
-          // Check file size (limit to 50MB)
-          if (fileSize > 50 * 1024 * 1024) {
-            emit(
-              state.copyWith(
-                errors:
-                    'File too large. Please select a file smaller than 50MB.',
-                isLoading: false,
-              ),
-            );
-            return;
-          }
-
-          final selectedFile = AudioRecording(
-            path: filePath,
-            duration: Duration.zero, // Duration will be determined by backend
-            createdAt: DateTime.now(),
-            fileName: file.name,
-            fileSize: fileSize,
-          );
-
-          emit(
-            state.copyWith(
-              selectedFile: selectedFile,
-              currentSource: AudioSource.file,
-              currentRecording: null,
-              recordingState: RecordingState.idle,
-              isLoading: false,
-            ),
-          );
-        }
+        // ວິເຄາະໄຟລ໌
+        await _predictFromFiles(file);
       } else {
-        emit(state.copyWith(isLoading: false));
+        emit(state.copyWith(status: AudioStatus.initial));
       }
     } catch (e) {
-      emit(
-        state.copyWith(errors: 'Failed to select file: $e', isLoading: false),
-      );
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: 'ເກີດຂໍ້ຜິດພາດໃນການເລືອກໄຟລ໌: ${e.toString()}',
+      ));
     }
   }
 
-  Future<void> predictInstrument() async {
-    final audioFile = _getCurrentAudioFile();
-    if (audioFile == null) {
-      emit(state.copyWith(errors: 'No audio file available for prediction'));
-      return;
+  // ວິເຄາະໄຟລ໌ສຽງ
+  // Future<void> _predictFromFiles(File file) async {
+  //   try {
+  //     emit(state.copyWith(status: AudioStatus.analyzing));
+
+  //     final result = await _repository.predictInstrument(file);
+
+  //     emit(state.copyWith(
+  //       status: AudioStatus.success,
+  //       predictionResult: result,
+  //     ));
+  //   } catch (e) {
+  //     emit(state.copyWith(
+  //       status: AudioStatus.failure,
+  //       errors: 'ການວິເຄາະລົ້ມເຫຼວ: ${e.toString()}',
+  //     ));
+  //   }
+  // }
+
+  // ວິເຄາະໄຟລ໌ທີ່ເລືອກແລ້ວ
+  Future<void> analyzeSelectedFile() async {
+    if (state.selectedFile != null) {
+      await _predictFromFiles(state.selectedFile!);
     }
-
-    try {
-      emit(state.copyWith(isUploading: true, errors: null));
-
-      final result = await _repository.predictInstrument(audioFile);
-
-      emit(state.copyWith(predictionResult: result, isUploading: false));
-    } catch (e) {
-      emit(state.copyWith(errors: 'Prediction failed: $e', isUploading: false));
-    }
   }
 
-  File? _getCurrentAudioFile() {
-    final path =
-        state.currentSource == AudioSource.recording
-            ? state.currentRecording?.path
-            : state.selectedFile?.path;
-
-    return path != null ? File(path) : null;
+  // ຣີເຊັດ state
+  void reset() {
+    emit(const AudioState());
   }
 
-  void clearRecording() {
-    _recordingTimer?.cancel();
-    _waveformTimer?.cancel();
-    _amplitudeSubscription?.cancel();
-
-    emit(
-      state.copyWith(
-        recordingState: RecordingState.idle,
-        recordingDuration: Duration.zero,
-        waveformData: [],
-        currentRecording: null,
-        currentSource: null,
-        errors: null,
-      ),
-    );
-  }
-
-  void clearSelectedFile() {
-    emit(state.copyWith(selectedFile: null, currentSource: null, errors: null));
-  }
-
-  void clearPrediction() {
-    emit(state.copyWith(predictionResult: null));
-  }
-
-  void clearErrors() {
-    emit(state.copyWith(errors: null));
+  // ກວດສອບການອະນຸຍາດ
+  Future<bool> checkPermissions() async {
+    final permission = await Permission.microphone.status;
+    return permission.isGranted;
   }
 
   @override
   Future<void> close() {
-    _recordingTimer?.cancel();
-    _waveformTimer?.cancel();
-    _amplitudeSubscription?.cancel();
     _recorder.dispose();
     return super.close();
+  }
+    Future<void> pickAudioFileWithValidation(File file, String fileName, int fileSize) async {
+    try {
+      emit(state.copyWith(status: AudioStatus.loading, errors: null));
+
+      // Check audio duration using just_audio
+      await _audioPlayer.setFilePath(file.path);
+      final duration = _audioPlayer.duration;
+      final durationSeconds = duration?.inMilliseconds != null 
+          ? duration!.inMilliseconds / 1000.0 
+          : 0.0;
+
+      emit(state.copyWith(
+        status: AudioStatus.fileSelected,
+        selectedFile: file,
+        fileName: fileName,
+        fileSize: fileSize,
+        audioDuration: durationSeconds, // You'll need to add this to your state
+      ));
+
+      // Auto-analyze the file
+      await _predictFromFiles(file);
+
+    } catch (e) {
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: 'ເກີດຂໍ້ຜິດພາດໃນການວິເຄາະໄຟລ໌: ${e.toString()}',
+      ));
+    }
+  }
+
+  // Enhanced file picker for WAV/MP3 only
+  Future<void> pickAudioFileEnhanced() async {
+    try {
+      emit(state.copyWith(status: AudioStatus.loading, errors: null));
+
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['wav', 'mp3'], // Only WAV and MP3
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final fileName = result.files.single.name;
+        final fileSize = result.files.single.size;
+
+        // Check file size (10MB max)
+        if (fileSize > 10 * 1024 * 1024) {
+          emit(state.copyWith(
+            status: AudioStatus.failure,
+            errors: 'ໄຟລ໌ໃຫຍ່ເກີນໄປ (ສູງສຸດ 10MB)',
+          ));
+          return;
+        }
+
+        await pickAudioFileWithValidation(file, fileName, fileSize);
+      } else {
+        emit(state.copyWith(status: AudioStatus.initial));
+      }
+    } catch (e) {
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: 'ເກີດຂໍ້ຜິດພາດໃນການເລືອກໄຟລ໌: ${e.toString()}',
+      ));
+    }
+  }
+
+  // Enhanced prediction with better errors handling
+  Future<void> _predictFromFiles(File file) async {
+    try {
+      emit(state.copyWith(status: AudioStatus.analyzing));
+
+      final result = await _repository.predictInstrument(file);
+
+      emit(state.copyWith(
+        status: AudioStatus.success,
+        predictionResult: result,
+      ));
+    } catch (e) {
+      String errorsMessage = 'ການວິເຄາະລົ້ມເຫຼວ';
+      
+      // More specific errors messages
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        errorsMessage = 'ບໍ່ສາມາດເຊື່ອມຕໍ່ກັບເຊີເວີໄດ້. ກະລຸນາກວດສອບການເຊື່ອມຕໍ່ອິນເຕີເນັດ';
+      } else if (e.toString().contains('timeout')) {
+        errorsMessage = 'ການວິເຄາະໃຊ້ເວລານານເກີນໄປ. ກະລຸນາລອງໃໝ່';
+      } else if (e.toString().contains('file')) {
+        errorsMessage = 'ໄຟລ໌ສຽງມີບັນຫາ. ກະລຸນາລອງໄຟລ໌ອື່ນ';
+      }
+
+      emit(state.copyWith(
+        status: AudioStatus.failure,
+        errors: errorsMessage,
+      ));
+    }
   }
 }

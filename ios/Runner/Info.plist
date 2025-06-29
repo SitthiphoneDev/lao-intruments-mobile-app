@@ -47,5 +47,10 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Some message to describe why you need this permission</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>la</string>
+	</array>
 </dict>
 </plist>

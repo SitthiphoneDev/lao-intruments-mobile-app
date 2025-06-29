@@ -1,146 +1,189 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:lao_instruments/constants/enums.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:lao_instruments/features/audio/state/audio_cubit.dart';
+import '../../../theme/app_colors.dart';
 
-class RecordingControls extends StatelessWidget {
-  const RecordingControls({super.key});
+
+class RecordingSection extends StatelessWidget {
+  const RecordingSection({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AudioCubit, AudioState>(
       builder: (context, state) {
-        return Column(
-          children: [
-            // Recording Progress
-            if (state.isRecording || state.recordingState == RecordingState.paused)
-              _buildRecordingProgress(state),
-            
-            const SizedBox(height: 20),
-            
-            // Control Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Record Button
-                _buildRecordButton(context, state),
-                
-                // Pause/Resume Button
-                if (state.isRecording || state.recordingState == RecordingState.paused)
-                  _buildPauseResumeButton(context, state),
-                
-                // Stop Button
-                if (state.recordingState != RecordingState.idle)
-                  _buildStopButton(context, state),
-                
-                // Clear Button
-                if (state.hasAudioData)
-                  _buildClearButton(context, state),
-              ],
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // File Import Button
-            _buildFileImportButton(context, state),
-          ],
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Text(
+                'audio.record_title'.tr(),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkGrey,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Recording Button
+              GestureDetector(
+                onTap: () => _handleRecordingTap(context, state),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: state.status == AudioStatus.recording
+                        ? AppColors.error
+                        : AppColors.primaryRed,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: state.status == AudioStatus.recording
+                            ? AppColors.error.withOpacity(0.3)
+                            : AppColors.primaryRed.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    state.status == AudioStatus.recording
+                        ? Icons.stop
+                        : Icons.mic,
+                    color: AppColors.white,
+                    size: 48,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Status Text
+              Text(
+                _getStatusText(state.status),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: state.status == AudioStatus.recording
+                      ? AppColors.error
+                      : AppColors.darkGrey,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                'audio.record_instruction'.tr(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              // Recording Timer
+              if (state.status == AudioStatus.recording)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _RecordingTimer(),
+                ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildRecordingProgress(AudioState state) {
-    final progress = state.recordingProgress;
-    final currentSeconds = state.recordingDuration.inSeconds;
-    final maxSeconds = state.maxRecordingDuration.inSeconds;
+  void _handleRecordingTap(BuildContext context, AudioState state) {
+    final cubit = context.read<AudioCubit>();
+    
+    if (state.status == AudioStatus.recording) {
+      cubit.stopRecording();
+    } else {
+      cubit.startRecording();
+    }
+  }
 
+  String _getStatusText(AudioStatus status) {
+    switch (status) {
+      case AudioStatus.recording:
+        return 'audio.recording'.tr();
+      case AudioStatus.recorded:
+        return 'audio.recorded'.tr();
+      case AudioStatus.analyzing:
+        return 'audio.analyzing'.tr();
+      default:
+        return 'audio.tap_to_record'.tr();
+    }
+  }
+}
+
+class _RecordingTimer extends StatefulWidget {
+  @override
+  State<_RecordingTimer> createState() => _RecordingTimerState();
+}
+
+class _RecordingTimerState extends State<_RecordingTimer>
+    with TickerProviderStateMixin {
+  late AnimationController _controller;
+  int _seconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 8),
+      vsync: this,
+    );
+
+    _controller.addListener(() {
+      setState(() {
+        _seconds = (_controller.value * 8).floor();
+      });
+    });
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
         LinearProgressIndicator(
-          value: progress,
-          backgroundColor: Colors.grey[300],
-          valueColor: AlwaysStoppedAnimation<Color>(
-            progress > 0.8 ? Colors.red : Colors.blue,
-          ),
+          value: _controller.value,
+          backgroundColor: AppColors.lightGrey,
+          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryRed),
         ),
         const SizedBox(height: 8),
         Text(
-          '$currentSeconds / $maxSeconds seconds',
-          style: TextStyle(
-            color: progress > 0.8 ? Colors.red : Colors.black,
+          '${_seconds}s / 8s',
+          style: const TextStyle(
+            fontSize: 14,
             fontWeight: FontWeight.bold,
+            color: AppColors.primaryRed,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildRecordButton(BuildContext context, AudioState state) {
-    return FloatingActionButton(
-      onPressed: state.canRecord
-          ? () => context.read<AudioCubit>().startRecording()
-          : () => context.read<AudioCubit>().startRecording(),
-      backgroundColor: state.canRecord ? Colors.red : Colors.grey,
-      child: Icon(
-        state.isRecording ? Icons.mic : Icons.mic_none,
-        color: Colors.white,
-      ),
-    );
-  }
-
-  Widget _buildPauseResumeButton(BuildContext context, AudioState state) {
-    return FloatingActionButton(
-      onPressed: state.recordingState == RecordingState.recording
-          ? () => context.read<AudioCubit>().pauseRecording()
-          : () => context.read<AudioCubit>().resumeRecording(),
-      backgroundColor: Colors.orange,
-      child: Icon(
-        state.recordingState == RecordingState.recording
-            ? Icons.pause
-            : Icons.play_arrow,
-        color: Colors.white,
-      ),
-    );
-  }
-
-  Widget _buildStopButton(BuildContext context, AudioState state) {
-    return FloatingActionButton(
-      onPressed: () => context.read<AudioCubit>().stopRecording(),
-      backgroundColor: Colors.grey[700],
-      child: const Icon(Icons.stop, color: Colors.white),
-    );
-  }
-
-  Widget _buildClearButton(BuildContext context, AudioState state) {
-    return FloatingActionButton(
-      onPressed: () {
-        if (state.currentSource == AudioSource.recording) {
-          context.read<AudioCubit>().clearRecording();
-        } else {
-          context.read<AudioCubit>().clearSelectedFile();
-        }
-      },
-      backgroundColor: Colors.red[300],
-      child: const Icon(Icons.clear, color: Colors.white),
-    );
-  }
-
-  Widget _buildFileImportButton(BuildContext context, AudioState state) {
-    return ElevatedButton.icon(
-      onPressed: state.isLoading
-          ? null
-          : () => context.read<AudioCubit>().selectAudioFile(),
-      icon: state.isLoading
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.file_upload),
-      label: const Text('Import Audio File'),
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      ),
     );
   }
 }

@@ -1,31 +1,28 @@
+
 part of 'audio_cubit.dart';
 
-enum AudioStatus { initial, loading, success, failure }
+enum AudioStatus {
+  initial,
+  recording,
+  recorded,
+  fileSelected, // ADD if not present
+  loading,
+  analyzing,
+  success,
+  failure,
+}
 
 @freezed
-abstract class AudioState with _$AudioState {
+class AudioState with _$AudioState {
   const factory AudioState({
     @Default(AudioStatus.initial) AudioStatus status,
-    String? errors,
-    @Default(RecordingState.idle) RecordingState recordingState,
-    @Default(Duration.zero) Duration recordingDuration,
-    @Default(Duration(seconds: 7)) Duration maxRecordingDuration,
-    @Default([]) List<double> waveformData,
-    AudioRecording? currentRecording,
-    AudioRecording? selectedFile,
-    AudioSource? currentSource,
+    String? errors, // or 'error' if you're using 'error'
+    String? recordingPath,
+    File? selectedFile,
+    String? fileName,
+    int? fileSize, 
+    double? audioDuration, 
     PredictionResult? predictionResult,
-    ModelInfo? modelInfo,
-    @Default([]) List<String> supportedInstruments,
-    @Default(false) bool isLoading,
-    @Default(false) bool isUploading,
-    @Default(false) bool hasPermission,
+    // ... keep all your existing fields
   }) = _AudioState;
-  
-  const AudioState._();
-  bool get isRecording => recordingState == RecordingState.recording;
-  bool get canRecord => hasPermission && !isRecording && !isLoading;
-  bool get hasAudioData => currentRecording != null || selectedFile != null;
-  double get recordingProgress =>
-      recordingDuration.inMilliseconds / maxRecordingDuration.inMilliseconds;
 }
