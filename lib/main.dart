@@ -9,9 +9,10 @@ Future<void> main() async {
   await configureDependencies();
   runApp(
     EasyLocalization(
-      supportedLocales: const [Locale(LanguageCode.en)],
+      supportedLocales: const [Locale(LanguageCode.en), Locale(LanguageCode.la),],
       path: "assets/translations",
       fallbackLocale: const Locale(LanguageCode.la),
+      startLocale: const Locale(LanguageCode.en),  
       child: const MyApp(),
     ),
   );

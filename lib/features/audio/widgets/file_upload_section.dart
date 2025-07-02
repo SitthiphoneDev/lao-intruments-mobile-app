@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:lao_instruments/features/audio/state/audio_cubit.dart';
 import '../../../theme/app_colors.dart';
+import '../../../generated/locale_keys.g.dart';
 
 class FileUploadSection extends StatelessWidget {
   const FileUploadSection({super.key});
@@ -28,7 +29,7 @@ class FileUploadSection extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'audio.upload_title'.tr(),
+                LocaleKeys.audio_upload_title.tr(),
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -66,8 +67,8 @@ class FileUploadSection extends StatelessWidget {
                       const SizedBox(height: 12),
                       Text(
                         state.selectedFile != null
-                            ? 'audio.file_selected'.tr()
-                            : 'audio.tap_to_upload'.tr(),
+                            ? LocaleKeys.audio_file_selected.tr()
+                            : LocaleKeys.audio_tap_to_upload.tr(),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -77,7 +78,7 @@ class FileUploadSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'audio.supported_formats'.tr(),
+                        LocaleKeys.audio_supported_formats_limited.tr(),
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.grey,
@@ -137,7 +138,7 @@ class FileUploadSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'audio.file_size'.tr(args: [fileSizeMB.toStringAsFixed(2)]),
+            LocaleKeys.audio_file_size.tr(args: [fileSizeMB.toStringAsFixed(2)]),
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.grey,

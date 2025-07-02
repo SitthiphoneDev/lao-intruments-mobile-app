@@ -7,15 +7,18 @@ import 'package:lao_instruments/theme/app_colors.dart';
 import 'package:lao_instruments/routers/app_router.dart';
 
 @RoutePage()
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatefulWidget implements AutoRouteWrapper {
   const HomeScreen({super.key});
-
+  
+  @override
+  Widget wrappedRoute(BuildContext context) {
+    return this;
+  }
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isInstrumentsExpanded = false;
    bool _isGitHubExpanded = false;
   
   // Launch URLs
@@ -326,7 +329,7 @@ Center(
                       const SizedBox(height: 16),
                       _buildAdvisorCard(
                         title: LocaleKeys.home_advisor.tr(),
-                        nameLao: 'ຮສ.ປອ. ລັດສະຫມີ ຈິດຕະວົງ',
+                        nameLao: 'ຮສ.ປອ. ນາງ ລັດສະຫມີ ຈິດຕະວົງ',
                         nameEng: 'Assoc.Prof.Dr. Lathsamy CHIDTAVONG',
                         isMainAdvisor: true,
                       ),
@@ -1053,7 +1056,6 @@ return Container(
                 subtitle: LocaleKeys.home_start_recording.tr(),
                 color: AppColors.primaryRed,
                 onTap: () {
-                  context.router.navigate(const AudioRoute());
                 },
               ),
               _buildActionCard(

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:lao_instruments/features/audio/state/audio_cubit.dart';
 import '../../../theme/app_colors.dart';
+import '../../../generated/locale_keys.g.dart';
 
 
 class RecordingSection extends StatelessWidget {
@@ -29,7 +30,7 @@ class RecordingSection extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'audio.record_title'.tr(),
+                LocaleKeys.audio_record_title.tr(),
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -87,7 +88,7 @@ class RecordingSection extends StatelessWidget {
               const SizedBox(height: 8),
 
               Text(
-                'audio.record_instruction'.tr(),
+                LocaleKeys.audio_record_instruction.tr(),
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.grey,
@@ -121,13 +122,13 @@ class RecordingSection extends StatelessWidget {
   String _getStatusText(AudioStatus status) {
     switch (status) {
       case AudioStatus.recording:
-        return 'audio.recording'.tr();
+        return LocaleKeys.audio_recording.tr();
       case AudioStatus.recorded:
-        return 'audio.recorded'.tr();
+        return LocaleKeys.audio_recorded.tr();
       case AudioStatus.analyzing:
-        return 'audio.analyzing'.tr();
+        return LocaleKeys.audio_analyzing.tr();
       default:
-        return 'audio.tap_to_record'.tr();
+        return LocaleKeys.audio_tap_to_record.tr();
     }
   }
 }

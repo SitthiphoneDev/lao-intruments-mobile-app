@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:auto_route/auto_route.dart';
 import '../../../theme/app_colors.dart';
 import '../models/audio_models.dart';
 
@@ -81,14 +80,11 @@ class _PredictionResultsSectionState extends State<PredictionResultsSection>
               // Header Section
               _buildHeader(),
               
-              // Main Result Display
+              // Main Result Display (Only the top result)
               _buildMainResult(),
               
               // Confidence Indicator
               _buildConfidenceIndicator(),
-              
-              // All Probabilities Section
-              _buildAllProbabilities(),
               
               const SizedBox(height: 20),
             ],
@@ -391,205 +387,6 @@ class _PredictionResultsSectionState extends State<PredictionResultsSection>
             ),
           ],
         ],
-      ),
-    );
-  }
-
-  Widget _buildAllProbabilities() {
-    final sortedProbabilities = widget.result.probabilities.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return Container(
-      margin: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.bar_chart, color: AppColors.primaryBlue, size: 24),
-              const SizedBox(width: 12),
-              Text(
-                'audio.all_probabilities'.tr(),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.darkGrey,
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          ...sortedProbabilities.asMap().entries.map((entry) {
-            final index = entry.key;
-            final probability = entry.value;
-            return AnimatedContainer(
-              duration: Duration(milliseconds: 300 + (index * 100)),
-              curve: Curves.easeOut,
-              child: _buildProbabilityItem(
-                probability.key,
-                probability.value,
-                probability.key == widget.result.instrument,
-                index,
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProbabilityItem(String instrument, double probability, bool isSelected, int index) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: isSelected ? [
-          BoxShadow(
-            color: _getInstrumentColor(instrument).withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ] : null,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: isSelected 
-              ? _getInstrumentGradient(instrument)
-              : null,
-          color: isSelected ? null : AppColors.lightGrey,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            // Instrument Image and Emoji
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelected 
-                    ? AppColors.white.withOpacity(0.2)
-                    : AppColors.white,
-                shape: BoxShape.circle,
-              ),
-              child: ClipOval(
-                child: instrument.toLowerCase() != 'unknown'
-                    ? Image.asset(
-                        'assets/images/instruments/${instrument.toLowerCase()}.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Center(
-                            child: Text(
-                              _getInstrumentEmoji(instrument),
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          );
-                        },
-                      )
-                    : Center(
-                        child: Icon(
-                          Icons.help_outline,
-                          size: 16,
-                          color: isSelected ? AppColors.white : AppColors.grey,
-                        ),
-                      ),
-              ),
-            ),
-            
-            const SizedBox(width: 12),
-            
-            // Instrument Name
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getInstrumentName(instrument),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      color: isSelected ? AppColors.white : AppColors.darkGrey,
-                    ),
-                  ),
-                  Text(
-                    _getInstrumentEnglishName(instrument),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isSelected 
-                          ? AppColors.white.withOpacity(0.8)
-                          : AppColors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(width: 12),
-            
-            // Probability Bar and Percentage
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Rank Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                        ? AppColors.white.withOpacity(0.2)
-                        : AppColors.lightGrey,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '#${index + 1}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? AppColors.white : AppColors.darkGrey,
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 4),
-                
-                Text(
-                  '${(probability * 100).toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? AppColors.white : AppColors.darkGrey,
-                  ),
-                ),
-                
-                const SizedBox(height: 4),
-                
-                Container(
-                  width: 60,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: isSelected 
-                        ? AppColors.white.withOpacity(0.3)
-                        : AppColors.lightGrey,
-                  ),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: probability,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(2),
-                        color: isSelected 
-                            ? AppColors.white
-                            : _getInstrumentColor(instrument),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }

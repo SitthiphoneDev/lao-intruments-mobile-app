@@ -1,3 +1,4 @@
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/services.dart';
@@ -128,7 +129,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                 scale: _scaleAnimation,
                 child: Container(
                   constraints: BoxConstraints(
-                    maxHeight: screenHeight * 0.8,
+                    maxHeight: screenHeight * 0.7,
                     maxWidth: screenWidth * 0.9,
                   ),
                   decoration: BoxDecoration(
@@ -171,7 +172,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                                   ),
                                 ),
                                 IconButton(
-                                  onPressed: () => Navigator.of(context).pop(),
+                                  onPressed: () => context.maybePop(),
                                   icon: const Icon(
                                     Icons.close,
                                     color: AppColors.white,
@@ -190,7 +191,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                                 return Transform.scale(
                                   scale: _pulseAnimation.value,
                                   child: Container(
-                                    padding: const EdgeInsets.all(20),
+                                    padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color: AppColors.white.withOpacity(0.2),
                                       shape: BoxShape.circle,
@@ -198,7 +199,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                                     child: Icon(
                                       Icons.check_circle,
                                       color: AppColors.white,
-                                      size: 60,
+                                      size: 40,
                                     ),
                                   ),
                                 );
@@ -243,6 +244,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
 
   Widget _buildInstrumentImageSection(Map<String, dynamic> instrumentData) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.lightGrey,
@@ -301,19 +303,6 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
           ),
           
           const SizedBox(height: 12),
-          
-          // Short Description
-          Text(
-            _getShortDescription(widget.result.instrument),
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.darkGrey,
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
         ],
       ),
     );
@@ -487,7 +476,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                 icon: const Icon(Icons.school, color: AppColors.white),
                 label: Text(
                   'audio.learn_more'.tr(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.white,
                   ),
@@ -498,6 +487,7 @@ class _EnhancedSuccessResultDialogState extends State<EnhancedSuccessResultDialo
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  alignment: Alignment.center
                 ),
               ),
             ),

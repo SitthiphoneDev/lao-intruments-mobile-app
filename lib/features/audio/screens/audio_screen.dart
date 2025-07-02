@@ -12,18 +12,24 @@ import 'package:lao_instruments/features/audio/widgets/enhanced_success_result_d
 import 'package:lao_instruments/features/audio/widgets/prediction_results_section.dart';
 import 'package:lao_instruments/features/audio/widgets/recording_controls.dart';
 import 'package:lao_instruments/generated/locale_keys.g.dart';
+import 'package:lao_instruments/routers/app_router.dart';
 import '../../../theme/app_colors.dart';
 
 @RoutePage()
-class AudioScreen extends StatelessWidget {
+class AudioScreen extends StatelessWidget implements AutoRouteWrapper {
   const AudioScreen({super.key});
+  
+  @override
+  Widget wrappedRoute(BuildContext context) {
+      return BlocProvider(
+        create: (context) => GetIt.instance<AudioCubit>(),
+        child: const _AudioScreenView(),
+      );
+    }
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) => GetIt.instance<AudioCubit>(),
-      child: const _AudioScreenView(),
-    );
+    return const _AudioScreenView();
   }
 }
 
@@ -143,30 +149,32 @@ class _AudioScreenViewState extends State<_AudioScreenView>
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: AppColors.lightGrey,
-          appBar: _buildAppBar(context, state),
-          body: Column(
-            children: [
-              // Custom Tab Bar
-              _buildCustomTabBar(),
-              
-              // Page Content
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: _onPageChanged,
-                  children: [
-                    _buildRecordingPage(state),
-                    _buildResultsPage(state),
-                  ],
-                ),
-              ),
-            ],
+  return Builder(
+    builder: (innerContext) => Scaffold(
+      backgroundColor: AppColors.lightGrey,
+      appBar: _buildAppBar(innerContext, state),
+      body: Column(
+        children: [
+          // Custom Tab Bar
+          _buildCustomTabBar(),
+
+          // Page Content
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: _onPageChanged,
+              children: [
+                _buildRecordingPage(state),
+                _buildResultsPage(state),
+              ],
+            ),
           ),
-          floatingActionButton: const SizedBox.shrink(), // Removed FAB
-        );
-      },
+        ],
+      ),
+    ),
+  );
+}
+
     );
   }
 
@@ -277,23 +285,6 @@ class _AudioScreenViewState extends State<_AudioScreenView>
     );
   }
 
-  Widget _buildFloatingActionButton(AudioState state) {
-    if (!_showFab || state.predictionResult == null) {
-      return const SizedBox.shrink();
-    }
-
-    return ScaleTransition(
-      scale: _fabAnimation,
-      child: FloatingActionButton.extended(
-        onPressed: () => _navigateToDetailedInstrumentScreen(state.predictionResult!),
-        backgroundColor: AppColors.primaryGold,
-        foregroundColor: AppColors.white,
-        icon: const Icon(Icons.school),
-        label: Text(LocaleKeys.audio_learn_more.tr()),
-      ),
-    );
-  }
-
   // Page 1: Recording Interface
   Widget _buildRecordingPage(AudioState state) {
     return SingleChildScrollView(
@@ -324,6 +315,8 @@ class _AudioScreenViewState extends State<_AudioScreenView>
           // Enhanced Loading Indicator
           if (state.status == AudioStatus.analyzing)
             _buildEnhancedAnalyzingIndicator(),
+            const SizedBox(height: 20),
+
 
           // Quick action to view last result
           if (state.predictionResult != null && _currentPage == 0)
@@ -479,7 +472,7 @@ class _AudioScreenViewState extends State<_AudioScreenView>
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              LocaleKeys.audio_confidence_percent.tr(args: [(result.confidence * 100).toStringAsFixed(1)]),
+              LocaleKeys.audio_confidence_percent.tr(args: [(result.confidence * 100).toStringAsFixed(2)]),
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -656,7 +649,7 @@ class _AudioScreenViewState extends State<_AudioScreenView>
   Widget _buildEnhancedInstructionsCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: AppColors.goldGradient,
         borderRadius: BorderRadius.circular(20),
@@ -669,61 +662,61 @@ class _AudioScreenViewState extends State<_AudioScreenView>
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(
+            Icons.lightbulb_outline,
+            color: AppColors.darkGrey,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.lightbulb_outline,
+              Text(
+                'audio.instructions_title'.tr(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                   color: AppColors.darkGrey,
-                  size: 28,
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'audio.instructions_title'.tr(),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkGrey,
-                      ),
-                    ),
-                    Text(
-                      LocaleKeys.audio_instructions_subtitle.tr(),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.darkGrey,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+              Text(
+                LocaleKeys.audio_instructions_subtitle.tr(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.darkGrey,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _buildEnhancedInstructionItem('🎙️', LocaleKeys.audio_instruction_1.tr()),
-          _buildEnhancedInstructionItem('🔇', LocaleKeys.audio_instruction_2.tr()),
-          _buildEnhancedInstructionItem('⏱️', LocaleKeys.audio_instruction_3.tr())
-        ],
-      ),
+        ),
+      ],
+    ),
+    const SizedBox(height: 8),
+    _buildEnhancedInstructionItem('🎙️', LocaleKeys.audio_instruction_1.tr()),
+    _buildEnhancedInstructionItem('🔇', LocaleKeys.audio_instruction_2.tr()),
+    _buildEnhancedInstructionItem('⏱️', LocaleKeys.audio_instruction_3.tr())
+  ],
+),
     );
   }
 
   Widget _buildEnhancedInstructionItem(String emoji, String text) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         color: AppColors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
@@ -1039,14 +1032,15 @@ class _AudioScreenViewState extends State<_AudioScreenView>
       builder: (context) => EnhancedSuccessResultDialog(
         result: result,
         onViewFullDetails: () {
-          Navigator.of(context).pop();
+         context.maybePop();
         },
         onLearnMore: () {
-          Navigator.of(context).pop();
+        context.maybePop();
+
           _navigateToDetailedInstrumentScreen(result);
         },
         onShareResult: () {
-          Navigator.of(context).pop();
+          context.maybePop();
           _shareResult(result);
         },
       ),
@@ -1054,12 +1048,10 @@ class _AudioScreenViewState extends State<_AudioScreenView>
   }
 
   void _navigateToDetailedInstrumentScreen(PredictionResult result) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => DetailedInstrumentScreen(
-          instrumentId: result.instrument,
-          predictionResult: result,
-        ),
+    context.pushRoute(
+      DetailedInstrumentRoute(
+        instrumentId: result.instrument,
+        predictionResult: result,
       ),
     );
   }

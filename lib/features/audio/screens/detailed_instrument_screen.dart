@@ -7,10 +7,14 @@ import '../../../theme/app_colors.dart';
 import '../models/audio_models.dart';
 
 @RoutePage()
-class  DetailedInstrumentScreen extends StatefulWidget {
+class  DetailedInstrumentScreen extends StatefulWidget implements AutoRouteWrapper {
   final String instrumentId;
   final PredictionResult? predictionResult;
-
+  
+  @override
+  Widget wrappedRoute(BuildContext context) {
+    return this;
+  }
   const DetailedInstrumentScreen({
     super.key,
     required this.instrumentId,
@@ -943,14 +947,5 @@ overflow: TextOverflow.ellipsis,
       default:
         return 'Traditional Lao Music';
     }
-  }
-
-  void _shareInstrumentInfo() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Sharing ${_getInstrumentName(widget.instrumentId)}...'),
-        backgroundColor: AppColors.primaryBlue,
-      ),
-    );
   }
 }

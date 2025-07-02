@@ -38,7 +38,7 @@ class QuickActionsCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => context.router.navigate(const AudioRoute()),
+              onPressed: (){},
               icon: const Icon(Icons.mic, color: AppColors.white),
               label: Text(
                 'actions.start_recording'.tr(),

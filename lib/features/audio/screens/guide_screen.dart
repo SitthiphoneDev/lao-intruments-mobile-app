@@ -6,9 +6,12 @@ import 'package:lao_instruments/routers/app_router.dart';
 import 'package:lao_instruments/theme/app_colors.dart';
 
 @RoutePage()
-class GuideScreen extends StatefulWidget {
+class GuideScreen extends StatefulWidget implements AutoRouteWrapper {
   const GuideScreen({super.key});
-
+  @override
+  Widget wrappedRoute(BuildContext context) {
+    return this;
+  }
   @override
   State<GuideScreen> createState() => _GuideScreenState();
 }

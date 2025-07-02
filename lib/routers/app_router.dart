@@ -19,7 +19,7 @@ class AppRouter extends RootStackRouter {
       initial: true,
       children: [
         AutoRoute(page: HomeRoute.page),
-        AutoRoute(page: AudioRoute.page),
+        AutoRoute(page: AudioRoute.page ,initial: true),
         AutoRoute(page: GuideRoute.page),
         AutoRoute(page: SettingsRoute.page),
       ],

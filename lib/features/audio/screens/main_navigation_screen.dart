@@ -5,17 +5,22 @@ import 'package:lao_instruments/routers/app_router.dart';
 import 'package:lao_instruments/theme/app_colors.dart';
 
 @RoutePage()
-class MainNavigationScreen extends StatelessWidget {
+class MainNavigationScreen extends StatelessWidget implements AutoRouteWrapper {
   const MainNavigationScreen({super.key});
+  @override
+  Widget wrappedRoute(BuildContext context) {
+    return this;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AutoTabsScaffold(
-      routes: const [
-        HomeRoute(),
-        AudioRoute(),
-        GuideRoute(),
-        SettingsRoute(),
+    return Builder(
+      builder: (innerContext) => AutoTabsScaffold(
+        routes: const [
+          HomeRoute(),
+          AudioRoute(),
+          GuideRoute(),
+          SettingsRoute(),
       ],
       bottomNavigationBuilder: (context, tabsRouter) {
         return BottomNavigationBar(
@@ -60,6 +65,8 @@ class MainNavigationScreen extends StatelessWidget {
           ],
         );
       },
-    );
-  }
+    ),
+  );
+}
+
 }

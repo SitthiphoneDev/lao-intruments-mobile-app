@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../theme/app_colors.dart';
+import '../../../generated/locale_keys.g.dart';
 import '../state/audio_cubit.dart';
 
 class EnhancedFileUploadSection extends StatelessWidget {
@@ -31,7 +32,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'audio.upload_title'.tr(),
+                LocaleKeys.audio_upload_title.tr(),
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -69,8 +70,8 @@ class EnhancedFileUploadSection extends StatelessWidget {
                       const SizedBox(height: 12),
                       Text(
                         state.selectedFile != null
-                            ? 'audio.file_selected'.tr()
-                            : 'audio.tap_to_upload'.tr(),
+                            ? LocaleKeys.audio_file_selected.tr()
+                            : LocaleKeys.audio_tap_to_upload.tr(),
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -81,7 +82,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
                       const SizedBox(height: 8),
                       // UPDATED: Only WAV and MP3
                       Text(
-                        'audio.supported_formats_limited'.tr(), // "WAV, MP3 only (max 10s)"
+                        LocaleKeys.audio_supported_formats_limited.tr(), // "WAV, MP3 only (max 10s)"
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.grey,
@@ -121,7 +122,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
 
         // Check file size (10MB max for safety)
         if (fileSize > 10 * 1024 * 1024) {
-          _showErrorDialog(context, 'audio.file_too_large'.tr());
+          _showErrorDialog(context, LocaleKeys.audio_file_too_large.tr());
           return;
         }
 
@@ -129,7 +130,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
         context.read<AudioCubit>().pickAudioFileWithValidation(file, fileName, fileSize);
       }
     } catch (e) {
-      _showErrorDialog(context, 'audio.file_error'.tr());
+      _showErrorDialog(context, LocaleKeys.audio_file_error.tr());
     }
   }
 
@@ -137,12 +138,12 @@ class EnhancedFileUploadSection extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('audio.error'.tr()),
+        title: Text(LocaleKeys.audio_error.tr()),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text('audio.ok'.tr()),
+            child: Text(LocaleKeys.audio_ok.tr()),
           ),
         ],
       ),
@@ -187,7 +188,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
           Row(
             children: [
               Text(
-                'audio.file_size'.tr(args: [fileSizeMB.toStringAsFixed(2)]),
+                LocaleKeys.audio_file_size.tr(args: [fileSizeMB.toStringAsFixed(2)]),
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.grey,
@@ -196,7 +197,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
               const Spacer(),
               if (state.audioDuration != null)
                 Text(
-                  'audio.duration'.tr(args: [state.audioDuration!.toStringAsFixed(1)]),
+                  LocaleKeys.audio_duration.tr(args: [state.audioDuration!.toStringAsFixed(1)]),
                   style: TextStyle(
                     fontSize: 12,
                     color: state.audioDuration! > 10.0 ? AppColors.error : AppColors.success,
@@ -221,7 +222,7 @@ class EnhancedFileUploadSection extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'audio.duration_warning'.tr(), // "Audio longer than 10s may affect accuracy"
+                        LocaleKeys.audio_duration_warning.tr(), // "Audio longer than 10s may affect accuracy"
                         style: const TextStyle(
                           fontSize: 11,
                           color: AppColors.error,
