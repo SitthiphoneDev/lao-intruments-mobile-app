@@ -25,5 +25,6 @@ class AppRouter extends RootStackRouter {
       ],
     ),
     AutoRoute(page: DetailedInstrumentRoute.page),
+    AutoRoute(page: AudioRoute.page),
   ];
 }

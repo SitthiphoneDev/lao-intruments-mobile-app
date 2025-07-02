@@ -234,7 +234,7 @@ Widget build(BuildContext context) {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      context.locale.languageCode == LanguageCode.la ? 'ລາວ' : 'English',
+                      context.locale.languageCode == LanguageCode.lo ? 'ລາວ' : 'English',
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.grey,
@@ -254,7 +254,7 @@ Widget build(BuildContext context) {
                   ),
                 ),
                 child: Text(
-                  context.locale.languageCode == LanguageCode.la ? 'ລາວ' : 'EN',
+                  context.locale.languageCode == LanguageCode.lo ? 'ລາວ' : 'EN',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -345,7 +345,7 @@ Widget build(BuildContext context) {
                     context,
                     'ລາວ',
                     'ລາວ',
-                    LanguageCode.la,
+                    LanguageCode.lo,
                     Icons.translate,
                   ),
                 ],
@@ -561,7 +561,7 @@ Widget build(BuildContext context) {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      context.locale.languageCode == LanguageCode.la 
+                      context.locale.languageCode == LanguageCode.lo 
                         ? member['nameLao']!
                         : member['nameEng']!,
                       style: const TextStyle(
