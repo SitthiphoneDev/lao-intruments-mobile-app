@@ -1,9 +1,14 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:lao_instruments/generated/locale_keys.g.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:lao_instruments/theme/app_colors.dart';
 import 'package:lao_instruments/routers/app_router.dart';
@@ -31,13 +36,189 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _downloadPDF() {
-    _launchURL('https://your-domain.com/proposal.pdf');
-  }
+void _downloadPDF() async {
+  await _downloadAssetFile(
+    assetPath: 'assets/documents/proposal.pdf',
+    fileName: 'Audio Classification of Lao Instruments Using Deep Learning.pdf', // Lao filename
+    displayName: 'Proposal PDF',
+  );
+}
 
-  void _downloadWord() {
-    _launchURL('https://your-domain.com/proposal.docx');
+void _downloadWord() async {
+  await _downloadAssetFile(
+    assetPath: 'assets/documents/proposal.docx',
+    fileName: 'Audio Classification of Lao Instruments Using Deep Learning.docx', // Lao filename
+    displayName: 'Proposal DOCX',
+  );
+}
+
+Future<void> _downloadAssetFile({
+  required String assetPath,
+  required String fileName,
+  required String displayName,
+}) async {
+  try {
+    // Show loading snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Text('ກຳລັງດາວໂຫຼດ $displayName...'), // "Downloading..." in Lao
+          ],
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    // Load asset as bytes
+    final byteData = await rootBundle.load(assetPath);
+    final bytes = byteData.buffer.asUint8List();
+
+    // Get appropriate directory based on platform
+    Directory? directory;
+    String directoryName = '';
+
+    if (Platform.isAndroid) {
+      // Try to use Downloads folder
+      if (await Permission.storage.request().isGranted) {
+        directory = Directory('/storage/emulated/0/Download');
+        directoryName = 'Downloads';
+        
+        // Fallback to external storage if Downloads doesn't exist
+        if (!await directory.exists()) {
+          final externalDir = await getExternalStorageDirectory();
+          directory = externalDir;
+          directoryName = 'App Storage';
+        }
+      } else {
+        // If permission denied, use app directory
+        directory = await getApplicationDocumentsDirectory();
+        directoryName = 'App Documents';
+      }
+    } else if (Platform.isIOS) {
+      directory = await getApplicationDocumentsDirectory();
+      directoryName = 'Documents';
+    }
+
+    if (directory != null) {
+      // Ensure directory exists
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+
+      // Create file
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsBytes(bytes);
+
+      // Show success message with open option
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  const SizedBox(width: 8),
+                  Text('✅ ດາວໂຫຼດສຳເລັດ!'), // "Download successful!" in Lao
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'ບັນທຶກຢູ່: $directoryName/$fileName',
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'ເປີດ', // "Open" in Lao
+            textColor: AppColors.primaryGold,
+            onPressed: () => OpenFile.open(file.path),
+          ),
+        ),
+      );
+
+      // Optional: Also show a dialog for better UX
+      // _showSuccessDialog(file.path, fileName, directoryName);
+
+    } else {
+      throw Exception('ບໍ່ສາມາດເຂົ້າເຖິງບ່ອນເກັບໄຟລ໌ໄດ້'); // "Cannot access file storage" in Lao
+    }
+
+  } catch (e) {
+    // Show error message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.red, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('❌ ດາວໂຫຼດລົ້ມເຫລວ: $e'), // "Download failed" in Lao
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red.shade800,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
+}
+
+// Optional: Success dialog for better user experience
+// void _showSuccessDialog(String filePath, String fileName, String directoryName) {
+//   showDialog(
+//     context: context,
+//     builder: (context) => AlertDialog(
+//       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+//       title: Row(
+//         children: [
+//           Icon(Icons.check_circle, color: Colors.green, size: 28),
+//           const SizedBox(width: 12),
+//           const Text('ດາວໂຫຼດສຳເລັດ'), // "Download Successful" in Lao
+//         ],
+//       ),
+//       content: Column(
+//         mainAxisSize: MainAxisSize.min,
+//         crossAxisAlignment: CrossAxisAlignment.start,
+//         children: [
+//           Text('ໄຟລ໌: $fileName'), // "File:" in Lao
+//           const SizedBox(height: 8),
+//           Text(
+//             'ບັນທຶກຢູ່: $directoryName', // "Saved in:" in Lao
+//             style: TextStyle(color: Colors.grey[600], fontSize: 14),
+//           ),
+//         ],
+//       ),
+//       actions: [
+//         TextButton(
+//           onPressed: () => Navigator.pop(context),
+//           child: const Text('ປິດ'), // "Close" in Lao
+//         ),
+//         ElevatedButton.icon(
+//           onPressed: () {
+//             Navigator.pop(context);
+//             OpenFile.open(filePath);
+//           },
+//           icon: const Icon(Icons.open_in_new, size: 18),
+//           label: const Text('ເປີດໄຟລ໌'), // "Open File" in Lao
+//           style: ElevatedButton.styleFrom(
+//             backgroundColor: AppColors.primaryGold,
+//             foregroundColor: Colors.white,
+//           ),
+//         ),
+//       ],
+//     ),
+//   );
+// }
 
   // Fixed: Add proper record functionality
   void _startRecording() {
@@ -363,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: LocaleKeys.home_backend_repo.tr(),
                   subtitle: LocaleKeys.home_backend_desc.tr(),
                   color: Colors.orange,
-                  onTap: () => _launchURL('https://github.com/your-username/lao-instruments-backend'),
+                  onTap: () => _launchURL('https://github.com/SitthiphoneDev/lao-instrument-backend'),
                 ),
                 const SizedBox(height: 12),
                 _buildGitHubRepoCard(
@@ -371,7 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: LocaleKeys.home_mobile_repo.tr(),
                   subtitle: LocaleKeys.home_mobile_desc.tr(),
                   color: Colors.blue,
-                  onTap: () => _launchURL('https://github.com/your-username/lao-instruments-mobile'),
+                  onTap: () => _launchURL('https://github.com/SitthiphoneDev/lao-intruments-mobile-app'),
                 ),
               ],
             ),
