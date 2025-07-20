@@ -504,7 +504,7 @@ Widget build(BuildContext context) {
       {
         'nameLao': 'ທ້າວ ເອກທະວີພົນ ທອງເພັດ',
         'nameEng': 'Mr. Ekthaviphonh THONGPHET',
-        'email': 'ekthaviphonh@gmail.com',
+        'email': 'ekthaviphonhthongphet@gmail.com',
         'phone': '020 59 179 444',
       },
       {
@@ -646,7 +646,7 @@ Widget build(BuildContext context) {
             ),
             const SizedBox(height: 12),
             InkWell(
-              onTap: () => _launchEmail('ekthaviphonh@gmail.com'),
+              onTap: () => _launchEmail('ekthaviphonhthongphet@gmail.com'),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -658,7 +658,7 @@ Widget build(BuildContext context) {
                     Icon(Icons.email, size: 20, color: AppColors.primaryRed),
                     SizedBox(width: 8),
                     Text(
-                      'ekthaviphonh@gmail.com',
+                      'ekthaviphonhthongphet@gmail.com',
                       style: TextStyle(
                         color: AppColors.primaryRed,
                         decoration: TextDecoration.underline,
