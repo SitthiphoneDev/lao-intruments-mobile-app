@@ -83,11 +83,15 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(color: Colors.black.withOpacity(0.5)),
           
           // Fixed: Remove staggered animations from scroll to prevent "haunted" effect
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: _buildAllScrollableContent(),
-            ),
+           ListView.builder(
+            physics: const ClampingScrollPhysics(),
+            itemCount: 1, // Only one item containing all content
+            itemBuilder: (context, index) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _buildAllScrollableContent(),
+              );
+            },
           ),
         ],
       ),
@@ -128,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: _buildLinksSection(),
       ),
       // Fixed: Reduced bottom padding
-      const SizedBox(height: 130),
+      const SizedBox(height: 20),
     ];
 
     // Apply animations only once when the widget is built, not on scroll
