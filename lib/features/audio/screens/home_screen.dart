@@ -536,7 +536,7 @@ Future<void> _downloadAssetFile({
                   title: LocaleKeys.home_ai_model_repo.tr(),
                   subtitle: LocaleKeys.home_ai_model_desc.tr(),
                   color: Colors.purple,
-                  onTap: () => _launchURL('https://github.com/your-username/lao-instruments-ai-model'),
+                  onTap: () => _launchURL('https://github.com/TFDNINE9/lao-instruments-classification-deep-learning.git'),
                 ),
                 const SizedBox(height: 12),
                 _buildGitHubRepoCard(
